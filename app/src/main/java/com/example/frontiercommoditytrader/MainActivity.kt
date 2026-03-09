@@ -1494,6 +1494,7 @@ private fun BankerCard(
             Text(snark, color = Color(0xFFB3E5FC), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
             HorizontalDivider(color = Color(0xFF324156))
             
+            Text("Available Cash: $${state.cash}", color = Color(0xFFFFCC80), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("Your Savings: $${state.bankSavings}", color = Color(0xFFA5D6A7), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("Earns 3% compounded interest daily.", color = Color(0xFFCFD8DC), fontSize = 12.sp)
 
@@ -1511,8 +1512,13 @@ private fun BankerCard(
                     Button(
                         onClick = { onDeposit(amountToDeposit) }, 
                         enabled = state.cash >= amountToDeposit && amountToDeposit > 0 && state.activeEncounter == null, 
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(0.7f)
                     ) { Text("Deposit") }
+                    Button(
+                        onClick = { onDeposit(state.cash) },
+                        enabled = state.cash > 0 && state.activeEncounter == null,
+                        modifier = Modifier.weight(0.6f)
+                    ) { Text("Max") }
                 }
 
                 if (state.bankSavings > 0) {
@@ -1529,8 +1535,13 @@ private fun BankerCard(
                         Button(
                             onClick = { onWithdraw(amountToWithdraw) }, 
                             enabled = state.bankSavings >= amountToWithdraw && amountToWithdraw > 0 && state.activeEncounter == null, 
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(0.7f)
                         ) { Text("Withdraw") }
+                        Button(
+                            onClick = { onWithdraw(state.bankSavings) },
+                            enabled = state.bankSavings > 0 && state.activeEncounter == null,
+                            modifier = Modifier.weight(0.6f)
+                        ) { Text("Max") }
                     }
                 }
             }
