@@ -1,4 +1,4 @@
-# The Dopest Deals v2.0.1
+# The Dopest Deals v1.0
 
 This build is patched to open and test-run in Android Studio **without requiring Firebase setup first**.
 
