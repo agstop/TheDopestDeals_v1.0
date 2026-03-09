@@ -167,7 +167,7 @@ private fun TravelSoundEffect(day: Int, cityName: String, enabled: Boolean, isMu
 
 enum class GameLength(val days: Int) { DAYS_30(30), DAYS_60(60), DAYS_90(90), DAYS_120(120) }
 enum class VendorType { WEAPONS, ARMOR, COMMODITIES }
-enum class EncounterType { THIEVES, COPS, FREE_CARGO, PLUMMET }
+enum class EncounterType { THIEVES, COPS, FREE_CARGO, PLUMMET, SPEEDING, VEHICLE_SEARCH }
 enum class CombatTarget { PLAYER, ENEMY }
 
 data class CommodityDef(
@@ -677,7 +677,14 @@ private fun rollEncounter(state: GameState, nextVisit: CityVisit): EncounterStat
     val rng = seededRandom(state.playerName, state.day, nextVisit.city.name, nextVisit.daySeed, state.cash, state.debt)
     if (rng.nextInt(100) >= 20) return null
     val carryingContraband = state.inventory.any { it.name == nextVisit.contraband && it.type == VendorType.COMMODITIES }
-    val type = if (carryingContraband && rng.nextBoolean()) EncounterType.COPS else EncounterType.THIEVES
+    // Roll encounter type: cops related (speeding, search, contraband sweep) vs thieves
+    val roll = rng.nextInt(100)
+    val type = when {
+        roll < 25 -> EncounterType.SPEEDING
+        roll < 50 -> EncounterType.VEHICLE_SEARCH
+        carryingContraband && rng.nextBoolean() -> EncounterType.COPS
+        else -> EncounterType.THIEVES
+    }
     return when (type) {
         EncounterType.THIEVES -> EncounterState(
             type = EncounterType.THIEVES,
@@ -691,8 +698,55 @@ private fun rollEncounter(state: GameState, nextVisit: CityVisit): EncounterStat
             text = "Cops in ${nextVisit.city.name} are cracking down on ${nextVisit.contraband}. Run or fight.",
             cityContraband = nextVisit.contraband,
         )
+        EncounterType.SPEEDING -> EncounterState(
+            type = EncounterType.SPEEDING,
+            title = "Pulled over!",
+            text = "A cop pulls you over for speeding. 'That'll be a \$100 fine, pal. Pay up or we got a problem.'",
+            cityContraband = nextVisit.contraband,
+        )
+        EncounterType.VEHICLE_SEARCH -> EncounterState(
+            type = EncounterType.VEHICLE_SEARCH,
+            title = "Vehicle search",
+            text = "A cop pulls you over and demands to search your vehicle. 'Step out. We're gonna take a look.'",
+            cityContraband = nextVisit.contraband,
+        )
         else -> null
     }
+}
+
+private fun paySpeedingFine(state: GameState): GameState {
+    val encounter = state.activeEncounter ?: return state
+    if (state.cash < 100) return state.copy(message = "you dont have enough cash dude!")
+    return state.copy(
+        cash = state.cash - 100,
+        activeEncounter = null,
+        message = "Paid the \$100 speeding fine. Cops let you go.",
+        eventLog = "Paid a \$100 speeding ticket."
+    )
+}
+
+private fun acceptSearch(state: GameState): GameState {
+    val encounter = state.activeEncounter ?: return state
+    val contraband = encounter.cityContraband
+    val hadContraband = state.inventory.any { it.name == contraband && it.type == VendorType.COMMODITIES }
+    val newInventory = state.inventory.filter { !(it.name == contraband && it.type == VendorType.COMMODITIES) }
+    val msg = if (hadContraband) "Cops found your $contraband and confiscated it all!" else "Cops searched your vehicle and found nothing. You're free to go."
+    return state.copy(
+        inventory = newInventory,
+        activeEncounter = null,
+        message = msg,
+        eventLog = if (hadContraband) "Lost all $contraband to a police search." else "Passed a vehicle search clean."
+    )
+}
+
+private fun bribeCop(state: GameState): GameState {
+    if (state.cash < 5000) return state.copy(message = "you dont have enough cash dude! Bribe costs \$5000.")
+    return state.copy(
+        cash = state.cash - 5000,
+        activeEncounter = null,
+        message = "Slipped the cop \$5000. He looks the other way.",
+        eventLog = "Bribed a cop for \$5000."
+    )
 }
 
 private fun prepareTravelChoices(state: GameState): GameState {
@@ -774,9 +828,12 @@ private fun runFromEncounter(state: GameState): GameState {
         return state.copy(activeEncounter = null, message = "Continuing journey.")
     }
     val rng = seededRandom(state.day, encounter.title, state.cash, state.health)
-    val success = rng.nextInt(100) < 50
+    val isCopType = encounter.type == EncounterType.COPS || encounter.type == EncounterType.SPEEDING || encounter.type == EncounterType.VEHICLE_SEARCH
+    val successChance = if (isCopType) 25 else 50
+    val success = rng.nextInt(100) < successChance
+    val escapedWho = if (isCopType) "cops" else "thieves"
     return if (success) {
-        state.copy(activeEncounter = null, eventLog = "You escaped the ${if (encounter.type == EncounterType.COPS) "cops" else "thieves"}.", message = "You got away.")
+        state.copy(activeEncounter = null, eventLog = "You escaped the $escapedWho.", message = "You got away.")
     } else {
         val damage = 15
         val newHealth = max(0, state.health - max(1, damage - state.armorDefense / 3))
@@ -1263,7 +1320,10 @@ fun TheDopestDealsApp() {
                 MediaPlayer.create(context, R.raw.punch)?.start()
             }
             state = newState
-        }, onFight = { state = fightEncounter(state) })
+        }, onFight = { state = fightEncounter(state) },
+        onPayFine = { state = paySpeedingFine(state) },
+        onAcceptSearch = { state = acceptSearch(state) },
+        onBribe = { state = bribeCop(state) })
     }
     
     if (state.vinniePenaltyAmount > 0 && !state.gameOver) {
@@ -1563,7 +1623,7 @@ private fun CityCard(state: GameState) {
 }
 
 @Composable
-private fun EncounterCard(state: GameState, onRun: () -> Unit, onFight: () -> Unit) {
+private fun EncounterCard(state: GameState, onRun: () -> Unit, onFight: () -> Unit, onPayFine: () -> Unit = {}, onAcceptSearch: () -> Unit = {}, onBribe: () -> Unit = {}) {
     val encounter = state.activeEncounter ?: return
     androidx.compose.ui.window.Dialog(
         onDismissRequest = { }, 
@@ -1571,7 +1631,7 @@ private fun EncounterCard(state: GameState, onRun: () -> Unit, onFight: () -> Un
     ) {
         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF301C1C))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (encounter.type == EncounterType.COPS) {
+            if (encounter.type == EncounterType.COPS || encounter.type == EncounterType.SPEEDING || encounter.type == EncounterType.VEHICLE_SEARCH) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Image(
                         painter = painterResource(id = R.drawable.cop_portrait),
@@ -1643,17 +1703,43 @@ private fun EncounterCard(state: GameState, onRun: () -> Unit, onFight: () -> Un
                 Text(encounter.text, color = Color(0xFFFFE0B2))
             }
             
-            if (encounter.type != EncounterType.FREE_CARGO && encounter.type != EncounterType.PLUMMET) {
-                StatLine("Enemy health", encounter.enemyHealth.toString())
-                Text(if (encounter.type == EncounterType.COPS) "Cops take half damage from your attacks." else "Thieves take full damage.", color = Color(0xFFB0BEC5))
-                if (encounter.playerTurnText.isNotBlank()) Text(encounter.playerTurnText, color = Color(0xFF90CAF9))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onRun, enabled = !state.gameOver) { Text("Run") }
-                    Button(onClick = onFight, enabled = !state.gameOver) { Text("Fight") }
+            when (encounter.type) {
+                EncounterType.SPEEDING -> {
+                    Text("Running from cops is risky — only 25% chance to escape.", color = Color(0xFFEF9A9A), fontSize = 12.sp)
+                    if (encounter.playerTurnText.isNotBlank()) Text(encounter.playerTurnText, color = Color(0xFF90CAF9))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onPayFine, enabled = !state.gameOver) { Text("Pay \$100") }
+                        Button(onClick = onRun, enabled = !state.gameOver) { Text("Run") }
+                        Button(onClick = onFight, enabled = !state.gameOver) { Text("Fight") }
+                    }
                 }
-            } else {
-                val btnText = if (encounter.type == EncounterType.PLUMMET) "Sweet, Thanks" else "Continue"
-                Button(onClick = onRun, modifier = Modifier.fillMaxWidth()) { Text(btnText) }
+                EncounterType.VEHICLE_SEARCH -> {
+                    Text("Running from cops is risky — only 25% chance to escape.", color = Color(0xFFEF9A9A), fontSize = 12.sp)
+                    if (encounter.playerTurnText.isNotBlank()) Text(encounter.playerTurnText, color = Color(0xFF90CAF9))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = onAcceptSearch, enabled = !state.gameOver) { Text("Accept") }
+                        Button(onClick = onBribe, enabled = !state.gameOver) { Text("Bribe \$5k") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onRun, enabled = !state.gameOver) { Text("Run") }
+                        Button(onClick = onFight, enabled = !state.gameOver) { Text("Fight") }
+                    }
+                }
+                EncounterType.COPS, EncounterType.THIEVES -> {
+                    StatLine("Enemy health", encounter.enemyHealth.toString())
+                    Text(if (encounter.type == EncounterType.COPS) "Cops take half damage. 25% run chance." else "Thieves take full damage.", color = Color(0xFFB0BEC5))
+                    if (encounter.playerTurnText.isNotBlank()) Text(encounter.playerTurnText, color = Color(0xFF90CAF9))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onRun, enabled = !state.gameOver) { Text("Run") }
+                        Button(onClick = onFight, enabled = !state.gameOver) { Text("Fight") }
+                    }
+                }
+                EncounterType.FREE_CARGO -> {
+                    Button(onClick = onRun, modifier = Modifier.fillMaxWidth()) { Text("Continue") }
+                }
+                EncounterType.PLUMMET -> {
+                    Button(onClick = onRun, modifier = Modifier.fillMaxWidth()) { Text("Sweet, Thanks") }
+                }
             }
         }
     }
