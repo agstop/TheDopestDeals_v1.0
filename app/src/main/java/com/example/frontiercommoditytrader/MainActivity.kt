@@ -23,7 +23,9 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalPolice
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.TrendingUp
@@ -90,9 +92,13 @@ fun Button(
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
     val view = LocalView.current
+    val context = LocalContext.current
     M3Button(
         onClick = {
-            view.playSoundEffect(SoundEffectConstants.CLICK)
+            val prefs = context.getSharedPreferences("dopest_deals", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("is_muted", false)) {
+                view.playSoundEffect(SoundEffectConstants.CLICK)
+            }
             onClick()
         },
         modifier = modifier,
@@ -109,9 +115,13 @@ fun OutlinedButton(
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
 ) {
     val view = LocalView.current
+    val context = LocalContext.current
     M3OutlinedButton(
         onClick = {
-            view.playSoundEffect(SoundEffectConstants.CLICK)
+            val prefs = context.getSharedPreferences("dopest_deals", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("is_muted", false)) {
+                view.playSoundEffect(SoundEffectConstants.CLICK)
+            }
             onClick()
         },
         modifier = modifier,
@@ -123,17 +133,28 @@ fun OutlinedButton(
 private fun chooseTravelSoundRes(day: Int, cityName: String): Int = R.raw.car_travel
 
 @Composable
-private fun TravelSoundEffect(day: Int, cityName: String, enabled: Boolean) {
+private fun TravelSoundEffect(day: Int, cityName: String, enabled: Boolean, isMuted: Boolean) {
     val context = LocalContext.current
-    DisposableEffect(day, cityName, enabled) {
-        if (!enabled) return@DisposableEffect onDispose { }
+    DisposableEffect(day, cityName, enabled, isMuted) {
+        if (!enabled || isMuted) return@DisposableEffect onDispose { }
         val player = MediaPlayer.create(context, chooseTravelSoundRes(day, cityName))
-        player?.setOnCompletionListener { mp -> mp.release() }
+        var released = false
+        player?.setOnCompletionListener { mp ->
+            if (!released) {
+                released = true
+                mp.release()
+            }
+        }
         player?.start()
         onDispose {
-            player?.setOnCompletionListener(null)
-            if (player?.isPlaying == true) player.stop()
-            player?.release()
+            if (!released) {
+                released = true
+                player?.setOnCompletionListener(null)
+                try {
+                    if (player?.isPlaying == true) player.stop()
+                } catch(e: Exception) {}
+                player?.release()
+            }
         }
     }
 }
@@ -878,6 +899,8 @@ fun TheDopestDealsApp() {
         mutableStateOf(if (saved != null) gameStateFromJson(saved, loadedScores) else GameState(leaderboard = loadedScores)) 
     }
     
+    var isMuted by remember { mutableStateOf(prefs.getBoolean("is_muted", false)) }
+    
     androidx.compose.runtime.LaunchedEffect(state) {
         prefs.edit().putString("saved_state", gameStateToJson(state)).apply()
     }
@@ -919,7 +942,7 @@ fun TheDopestDealsApp() {
         }
     }
 
-    TravelSoundEffect(day = state.day, cityName = state.currentVisit.city.name, enabled = state.started && state.day > 1)
+    TravelSoundEffect(day = state.day, cityName = state.currentVisit.city.name, enabled = state.started && state.day > 1, isMuted = isMuted)
 
     var currentTab by rememberSaveable { mutableStateOf(0) }
     var marketTab by rememberSaveable { mutableStateOf(0) }
@@ -934,7 +957,7 @@ fun TheDopestDealsApp() {
                     NavigationBarItem(selected = currentTab == 1, onClick = { currentTab = 1 }, icon = { Icon(Icons.Default.Storefront, "") }, label = { Text("Market") })
                     NavigationBarItem(selected = currentTab == 2, onClick = { currentTab = 2 }, icon = { Icon(Icons.Default.Gavel, "") }, label = { Text("Vinnie") })
                     NavigationBarItem(selected = currentTab == 3, onClick = { currentTab = 3 }, icon = { Icon(Icons.Default.LocalHospital, "") }, label = { Text("Doctor") })
-                    NavigationBarItem(selected = currentTab == 4, onClick = { currentTab = 4 }, icon = { Icon(Icons.Default.EmojiEvents, "") }, label = { Text("Ranks") })
+                    NavigationBarItem(selected = currentTab == 4, onClick = { currentTab = 4 }, icon = { Icon(Icons.Default.Settings, "") }, label = { Text("Options") })
                 }
             }
         }
@@ -999,10 +1022,23 @@ fun TheDopestDealsApp() {
                     3 -> { // Doctor Tab
                         DoctorCard(state) { state = healPlayer(state) }
                     }
-                    4 -> { // Ranks / Setup / Game Over state
-                        LeaderboardCard(state.leaderboard)
+                    4 -> { // Options / Setup / Game Over state
+                        OptionsCard(
+                            isMuted = isMuted,
+                            onMuteToggle = {
+                                isMuted = !isMuted
+                                prefs.edit().putBoolean("is_muted", isMuted).apply()
+                            },
+                            onRestart = {
+                                currentTab = 0
+                                state = GameState(leaderboard = state.leaderboard)
+                            }
+                        )
                         if (state.gameOver) {
-                            SetupCard(state = state, nameInput = nameInput, onNameChange = { nameInput = it.take(18) }, onSelectLength = { state = state.copy(selectedLength = it) }, onStart = { beginRun() })
+                            SetupCard(state = state, nameInput = nameInput, onNameChange = { nameInput = it.take(18) }, onSelectLength = { state = state.copy(selectedLength = it) }, onStart = { 
+                                currentTab = 0
+                                beginRun() 
+                            })
                         }
                     }
                 }
@@ -1405,5 +1441,27 @@ private fun StatLine(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, color = Color(0xFFB0BEC5))
         Text(value, color = Color.White, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun OptionsCard(isMuted: Boolean, onMuteToggle: () -> Unit, onRestart: () -> Unit) {
+    val context = LocalContext.current
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2330))) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Settings, contentDescription = null, tint = Color.LightGray)
+                Text("Options", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+            Button(onClick = onRestart, modifier = Modifier.fillMaxWidth()) {
+                Text("Restart Game")
+            }
+            Button(onClick = onMuteToggle, modifier = Modifier.fillMaxWidth()) {
+                Text(if (isMuted) "Unmute Sounds" else "Mute Sounds")
+            }
+            Button(onClick = { (context as? android.app.Activity)?.finish() }, modifier = Modifier.fillMaxWidth()) {
+                Text("Exit Game")
+            }
+        }
     }
 }
