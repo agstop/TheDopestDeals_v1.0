@@ -307,38 +307,38 @@ private const val COP_DAMAGE = 20
 
 private val cities = listOf(
     CityDef("Rusthaven", "Scrapyard alleys and hard-nosed haggling.", cheapCommodity = "Shake", cheapBias = -20, richBias = 5),
-    CityDef("Blackport", "Dockside hustlers move stash under dim lights.", cheapCommodity = "Tar Brick", cheapBias = -16, richBias = 8),
-    CityDef("Iron Mesa", "Mine money and ore caravans keep the streets loud.", cheapCommodity = "Night Howl", cheapBias = -28, richBias = 10),
-    CityDef("Dustveil", "Sandstorms hide deals and theft in equal measure.", cheapCommodity = "Velvet Hits", cheapBias = -14, richBias = 4),
+    CityDef("Blackport", "Dockside hustlers move stash under dim lights.", cheapCommodity = "Opium", cheapBias = -16, richBias = 8),
+    CityDef("Iron Mesa", "Mine money and ore caravans keep the streets loud.", cheapCommodity = "MDMA", cheapBias = -28, richBias = 10),
+    CityDef("Dustveil", "Sandstorms hide deals and theft in equal measure.", cheapCommodity = "Special K", cheapBias = -14, richBias = 4),
     CityDef("Northreach", "Cold roads, rich buyers, and expensive shortages.", richBias = 18),
-    CityDef("Cinder Bay", "Fuel, heat, and machine noise everywhere.", cheapCommodity = "Blue Flash", cheapBias = -26, richBias = 12),
+    CityDef("Cinder Bay", "Fuel, heat, and machine noise everywhere.", cheapCommodity = "Klonopins", cheapBias = -26, richBias = 12),
     CityDef("Stormwatch", "A walled market with armored guards and fat purses.", richBias = 16),
-    CityDef("Red Quarry", "Stone dust and ore fortunes.", cheapCommodity = "Night Howl", cheapBias = -18, richBias = 9),
+    CityDef("Red Quarry", "Stone dust and ore fortunes.", cheapCommodity = "MDMA", cheapBias = -18, richBias = 9),
     CityDef("Ashfall", "Danger routes make medkits and fuel jump in price.", richBias = 15),
     CityDef("Goldmere", "Big money town where markups get ridiculous.", richBias = 22),
 )
 
 private val commodities = listOf(
     CommodityDef("Shake", 80, 180, 20, "Bottom-shelf street bundles flipped for quick cash."),
-    CommodityDef("Tar Brick", 120, 240, 22, "Sticky black bricks sold cheap in rough corners."),
-    CommodityDef("Moon Wax", 160, 300, 24, "Little tins of glossy concentrate with steady buzz."),
-    CommodityDef("Fog", 220, 420, 28, "Pale powder wraps that move quietly through alley deals."),
-    CommodityDef("Blue Flash", 320, 560, 32, "Glittery blue chips with heat-sealed street packaging."),
-    CommodityDef("Night Howl", 420, 700, 34, "Dark party powder that surges after sundown."),
-    CommodityDef("Ghost Rain", 560, 900, 38, "Premium haze packs with jumpy price swings."),
-    CommodityDef("Velvet Hits", 700, 1100, 42, "Stamped paper hits with boutique undercity hype."),
-    CommodityDef("Alley Rocks", 900, 1400, 44, "Chunky street stones with ugly volatility."),
-    CommodityDef("Pain Drops", 1100, 1700, 46, "Pressed drops that disappear fast in hard towns."),
-    CommodityDef("Ox Cards", 1300, 1900, 48, "Premium marked strips favored by rich buyers."),
-    CommodityDef("Morrow Glass", 1500, 2200, 50, "Sealed ampules whispered about in clinic back rooms."),
-    CommodityDef("Redline", 1800, 2600, 54, "Potent red synth packs that can spike overnight."),
-    CommodityDef("Solar Flare", 2100, 3000, 56, "Bright festival tabs that travel well."),
-    CommodityDef("Crown Caps", 2400, 3400, 58, "Rare caps hauled in from back-road growers."),
-    CommodityDef("Clinic Snow", 2800, 3900, 60, "Clean dissociation powder cut for velvet-room buyers."),
-    CommodityDef("Neon Hearts", 3200, 4500, 62, "Designer party presses stamped with flashy logos."),
-    CommodityDef("Spirit Fog", 3600, 5000, 64, "Rare smoke packs whispered about in alley markets."),
-    CommodityDef("Desert Stars", 4200, 5800, 68, "Mystic buttons hauled from long-haul caravans."),
-    CommodityDef("Laugh Canisters", 5000, 7000, 72, "Heavy steel canisters that sell best in wealthy zones."),
+    CommodityDef("Opium", 120, 240, 22, "Sticky black bricks sold cheap in rough corners."),
+    CommodityDef("Dabs", 160, 300, 24, "Little tins of glossy concentrate with steady buzz."),
+    CommodityDef("Hydro Tabs", 220, 420, 28, "Pale powder wraps that move quietly through alley deals."),
+    CommodityDef("Klonopins", 320, 560, 32, "Glittery blue chips with heat-sealed street packaging."),
+    CommodityDef("MDMA", 420, 700, 34, "Dark party powder that surges after sundown."),
+    CommodityDef("Mescaline", 560, 900, 38, "Premium haze packs with jumpy price swings."),
+    CommodityDef("Special K", 700, 1100, 42, "Stamped paper hits with boutique undercity hype."),
+    CommodityDef("Crack", 900, 1400, 44, "Chunky street stones with ugly volatility."),
+    CommodityDef("Morphine", 1100, 1700, 46, "Pressed drops that disappear fast in hard towns."),
+    CommodityDef("Oxys", 1300, 1900, 48, "Premium marked strips favored by rich buyers."),
+    CommodityDef("Meth", 1500, 2200, 50, "Sealed ampules whispered about in clinic back rooms."),
+    CommodityDef("Coke", 1800, 2600, 54, "Potent red synth packs that can spike overnight."),
+    CommodityDef("Whippets", 2100, 3000, 56, "Bright festival tabs that travel well."),
+    CommodityDef("Shrooms", 2400, 3400, 58, "Rare caps hauled in from back-road growers."),
+    CommodityDef("Peyote", 2800, 3900, 60, "Clean dissociation powder cut for velvet-room buyers."),
+    CommodityDef("Xanies", 3200, 4500, 62, "Designer party presses stamped with flashy logos."),
+    CommodityDef("Fentanyl", 3600, 5000, 64, "Rare smoke packs whispered about in alley markets."),
+    CommodityDef("Heroin", 4200, 5800, 68, "Mystic buttons hauled from long-haul caravans."),
+    CommodityDef("LSD", 5000, 7000, 72, "Heavy steel canisters that sell best in wealthy zones."),
 )
 
 private val weaponDefs = listOf(
@@ -1253,7 +1253,7 @@ fun TheDopestDealsApp() {
                         InventoryCard(state) { item, qty -> state = sellCommodity(state, item, qty) }
                         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = marketTab == 0, onClick = { marketTab = 0 }, label = { Text("Commodities") })
+                                FilterChip(selected = marketTab == 0, onClick = { marketTab = 0 }, label = { Text("Drugs") })
                                 FilterChip(selected = marketTab == 1, onClick = { marketTab = 1 }, label = { Text("Weapons") })
                                 FilterChip(selected = marketTab == 2, onClick = { marketTab = 2 }, label = { Text("Armor") })
                             }
