@@ -1,0 +1,17 @@
+R_DEF: Internal format may change without notice
+local
+drawable banker_portrait
+drawable cargo_upgrade_man
+drawable commodity_plummet
+drawable cop_portrait
+drawable doctor_portrait
+drawable thief_portrait
+drawable vinnie_portrait
+raw boat_travel
+raw car_travel
+raw cash_register
+raw chuckle
+raw plane_travel
+raw punch
+string app_name
+style Theme.TheDopestDeals

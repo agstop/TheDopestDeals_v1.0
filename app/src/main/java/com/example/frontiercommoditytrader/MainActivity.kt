@@ -14,14 +14,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.LocalPolice
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
@@ -63,6 +67,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.frontiercommoditytrader.ui.theme.TheDopestDealsTheme
 import org.json.JSONArray
 import org.json.JSONObject
@@ -161,7 +167,7 @@ private fun TravelSoundEffect(day: Int, cityName: String, enabled: Boolean, isMu
 
 enum class GameLength(val days: Int) { DAYS_30(30), DAYS_60(60), DAYS_90(90), DAYS_120(120) }
 enum class VendorType { WEAPONS, ARMOR, COMMODITIES }
-enum class EncounterType { THIEVES, COPS }
+enum class EncounterType { THIEVES, COPS, FREE_CARGO, PLUMMET }
 enum class CombatTarget { PLAYER, ENEMY }
 
 data class CommodityDef(
@@ -189,10 +195,10 @@ data class ArmorDef(
     val defense: Int,
 )
 
-data class MarketCommodity(val def: CommodityDef, val price: Int)
-data class MarketWeapon(val def: WeaponDef, val price: Int)
-data class MarketAmmo(val weaponName: String, val ammoName: String, val price: Int)
-data class MarketArmor(val def: ArmorDef)
+data class MarketCommodity(val def: CommodityDef, val price: Int, var qty: Int)
+data class MarketWeapon(val def: WeaponDef, val price: Int, var qty: Int)
+data class MarketAmmo(val weaponName: String, val ammoName: String, val price: Int, var qty: Int)
+data class MarketArmor(val def: ArmorDef, var qty: Int)
 
 data class InventoryItem(
     val name: String,
@@ -215,6 +221,7 @@ data class CityVisit(
     val contraband: String,
     val commodities: List<MarketCommodity>,
     val marketEventText: String = "Street prices feel normal today.",
+    val plummetTarget: String? = null,
     val weaponsAvailable: Boolean,
     val weaponStock: List<MarketWeapon>,
     val ammoStock: List<MarketAmmo>,
@@ -255,6 +262,7 @@ data class GameState(
     val day: Int = 1,
     val cash: Int = 2000,
     val debt: Int = 2000,
+    val bankSavings: Int = 0,
     val health: Int = 100,
     val cargoCapacity: Int = 30,
     val armorDefense: Int = 0,
@@ -266,6 +274,7 @@ data class GameState(
     val activeEncounter: EncounterState? = null,
     val travelChoices: List<String> = emptyList(),
     val leaderboard: List<ScoreEntry> = emptyList(),
+    val vinniePenaltyAmount: Int = 0,
 ) {
     fun usedCargo(): Int = inventory.filter { it.type == VendorType.COMMODITIES }.sumOf { it.quantity }
     fun freeCargo(): Int = cargoCapacity - usedCargo()
@@ -343,6 +352,7 @@ private val weaponDefs = listOf(
 )
 
 private val armorDefs = listOf(
+    ArmorDef("Fanny pack", 5000, 0), // Special item to prevent theft
     ArmorDef("Leather Jacket", 1400, 5),
     ArmorDef("Kevlar Vest", 4200, 10),
     ArmorDef("Ballistic Armor", 9000, 18),
@@ -356,41 +366,66 @@ private fun seededRandom(vararg keys: Any): Random {
 
 private fun generateCityVisit(city: CityDef, day: Int): CityVisit {
     val rng = seededRandom(city.name, day)
-    val listed = commodities.shuffled(rng).take(rng.nextInt(5, 9))
-    val contraband = listed.shuffled(rng).first().name
+    val contrabandDef = commodities.shuffled(rng).first()
+    val contraband = contrabandDef.name
+    
+    val otherCommodities = commodities.filter { it.name != contraband }.shuffled(rng).take(rng.nextInt(4, 8))
+    val listed = (otherCommodities + contrabandDef).shuffled(rng)
+
     var marketEventText = "Street prices feel normal today."
     var spikeTarget: String? = null
     var glutTarget: String? = null
-    when (rng.nextInt(100)) {
-        in 0..9 -> {
-            spikeTarget = listed.random(rng).name
-            marketEventText = "Shortage rumor: ${'$'}spikeTarget is drying up, and street sellers are gouging buyers."
+    var plummetTarget: String? = null
+    
+    val eventChance = rng.nextInt(100)
+    when {
+        eventChance < 15 -> { // 15% chance for a massive plummet event
+            plummetTarget = listed.random(rng).name
         }
-        in 10..19 -> {
+        eventChance in 15..24 -> { // 10% chance
+            spikeTarget = listed.random(rng).name
+            marketEventText = "Shortage rumor: $spikeTarget is drying up, and street sellers are gouging buyers."
+        }
+        eventChance in 25..34 -> { // 10% chance
             glutTarget = listed.random(rng).name
-            marketEventText = "Oversupply rumor: too much ${'$'}glutTarget hit the alleys, so prices are crashing."
+            marketEventText = "Oversupply rumor: too much $glutTarget hit the alleys, so prices are crashing."
         }
     }
+    
     val commodityStock = listed.map { def ->
         val base = rng.nextInt(def.minPrice, def.maxPrice + 1)
         val bias = if (city.cheapCommodity == def.name) city.cheapBias else 0
         var price = max(20, base + bias + city.richBias + rng.nextInt(-def.volatility, def.volatility + 1))
+        
         if (def.name == spikeTarget) price = max(price + max(100, (price * 0.9).toInt()), (price * 18) / 10)
         if (def.name == glutTarget) price = max(20, min((price * 45) / 100, price - max(80, (price * 35) / 100)))
-        MarketCommodity(def, price)
+        if (def.name == plummetTarget) {
+            val dropPct = rng.nextInt(20, 51) / 100f // 20% to 50% multiplier
+            price = max(5, (price * dropPct).toInt())
+        }
+        if (def.name == contraband) {
+            price *= rng.nextInt(10, 21) // 10x to 20x normal value for contraband
+        }
+        MarketCommodity(def, price, rng.nextInt(1, 31))
     }.sortedBy { it.price }
 
     val weaponsAvailable = rng.nextInt(100) < 35
     val weaponStock = if (weaponsAvailable) {
-        weaponDefs.shuffled(rng).take(3).map { def -> MarketWeapon(def, rng.nextInt(def.minPrice, def.maxPrice + 1)) }
+        weaponDefs.shuffled(rng).take(3).map { def -> MarketWeapon(def, rng.nextInt(def.minPrice, def.maxPrice + 1), 1) }
     } else emptyList()
     val ammoStock = weaponStock.mapNotNull { stock ->
         val ammoName = stock.def.ammoName ?: return@mapNotNull null
-        MarketAmmo(stock.def.name, ammoName, rng.nextInt(stock.def.ammoMinPrice, stock.def.ammoMaxPrice + 1))
+        MarketAmmo(stock.def.name, ammoName, rng.nextInt(stock.def.ammoMinPrice, stock.def.ammoMaxPrice + 1), 1)
     }
 
     val armorAvailable = rng.nextInt(100) < 35
-    val armorStock = if (armorAvailable) armorDefs.shuffled(rng).take(2).map { MarketArmor(it) } else emptyList()
+    val armorStock = if (armorAvailable) {
+        val stock = armorDefs.filter { it.name != "Fanny pack" }.shuffled(rng).take(2).toMutableList()
+        if (rng.nextInt(100) < 40) {
+            armorDefs.find { it.name == "Fanny pack" }?.let { stock.add(it) }
+        }
+        stock.map { MarketArmor(it, 1) }
+    } else emptyList()
 
     return CityVisit(
         city = city,
@@ -398,6 +433,7 @@ private fun generateCityVisit(city: CityDef, day: Int): CityVisit {
         contraband = contraband,
         commodities = commodityStock,
         marketEventText = marketEventText,
+        plummetTarget = plummetTarget,
         weaponsAvailable = weaponsAvailable,
         weaponStock = weaponStock,
         ammoStock = ammoStock,
@@ -407,8 +443,8 @@ private fun generateCityVisit(city: CityDef, day: Int): CityVisit {
 }
 
 private fun initialMobsterLoan(day: Int): MobsterState = MobsterState(
-    debtDueDay = day + LOAN_TERM_DAYS,
-    latestThreat = "Vinnie \"The Knuckle\" Moretti fronts you cash. He gives you $LOAN_TERM_DAYS full days before you're late.",
+    debtDueDay = 10,
+    latestThreat = "Vinnie \"The Knuckle\" Moretti fronts you cash. He gives you until day 10 before you're late.",
 )
 
 private fun addItem(inventory: List<InventoryItem>, name: String, type: VendorType, qty: Int, unitCost: Int): List<InventoryItem> {
@@ -426,36 +462,52 @@ private fun addItem(inventory: List<InventoryItem>, name: String, type: VendorTy
     }
 }
 
-private fun removeOne(inventory: List<InventoryItem>, name: String): List<InventoryItem> =
+private fun removeItems(inventory: List<InventoryItem>, name: String, qty: Int): List<InventoryItem> =
     inventory.mapNotNull {
         if (it.name == name) {
-            val remaining = it.quantity - 1
+            val remaining = it.quantity - qty
             if (remaining > 0) it.copy(quantity = remaining) else null
         } else it
     }
 
-private fun buyCommodity(state: GameState, item: MarketCommodity): GameState {
-    if (state.cash < item.price) return state.copy(message = "Not enough cash.")
-    if (state.freeCargo() <= 0) return state.copy(message = "Cargo is full.")
+private fun removeOne(inventory: List<InventoryItem>, name: String): List<InventoryItem> =
+    removeItems(inventory, name, 1)
+
+private fun buyCommodity(state: GameState, item: MarketCommodity, qty: Int): GameState {
+    val maxBuy = min(qty, item.qty)
+    if (maxBuy <= 0) return state
+    val cost = item.price * maxBuy
+    if (state.cash < cost) return state.copy(message = "you dont have enough cash dude!")
+    if (state.freeCargo() < maxBuy) return state.copy(message = "Not enough cargo space.")
+    
+    item.qty -= maxBuy
+    
     return state.copy(
-        cash = state.cash - item.price,
-        inventory = addItem(state.inventory, item.def.name, VendorType.COMMODITIES, 1, item.price),
-        message = "Bought 1 ${item.def.name} for $${item.price}.",
+        cash = state.cash - cost,
+        inventory = addItem(state.inventory, item.def.name, VendorType.COMMODITIES, maxBuy, item.price),
+        message = "Bought $maxBuy ${item.def.name} for $${cost}.",
     )
 }
 
-private fun sellCommodity(state: GameState, item: InventoryItem): GameState {
+private fun sellCommodity(state: GameState, item: InventoryItem, qty: Int): GameState {
+    if (qty <= 0) return state
     val local = state.currentVisit.commodities.firstOrNull { it.def.name == item.name }?.price
     if (local == null) return state.copy(message = "No buyers for ${item.name} here.")
+    val saleQty = min(qty, item.quantity)
+    val revenue = local * saleQty
     return state.copy(
-        cash = state.cash + local,
-        inventory = removeOne(state.inventory, item.name),
-        message = "Sold 1 ${item.name} for $${local}.",
+        cash = state.cash + revenue,
+        inventory = removeItems(state.inventory, item.name, saleQty),
+        message = "Sold $saleQty ${item.name} for $${revenue}.",
     )
 }
 
 private fun buyWeapon(state: GameState, item: MarketWeapon): GameState {
+    if (item.qty <= 0) return state.copy(message = "Out of stock.")
     if (state.cash < item.price) return state.copy(message = "Not enough cash.")
+    
+    item.qty -= 1
+    
     return state.copy(
         cash = state.cash - item.price,
         inventory = addItem(state.inventory, item.def.name, VendorType.WEAPONS, 1, item.price),
@@ -464,7 +516,11 @@ private fun buyWeapon(state: GameState, item: MarketWeapon): GameState {
 }
 
 private fun buyAmmo(state: GameState, item: MarketAmmo): GameState {
+    if (item.qty <= 0) return state.copy(message = "Out of stock.")
     if (state.cash < item.price) return state.copy(message = "Not enough cash.")
+    
+    item.qty -= 1
+    
     return state.copy(
         cash = state.cash - item.price,
         inventory = addItem(state.inventory, item.ammoName, VendorType.WEAPONS, 1, item.price),
@@ -473,13 +529,32 @@ private fun buyAmmo(state: GameState, item: MarketAmmo): GameState {
 }
 
 private fun buyArmor(state: GameState, item: MarketArmor): GameState {
+    if (item.qty <= 0) return state.copy(message = "Out of stock.")
     if (state.cash < item.def.price) return state.copy(message = "Not enough cash.")
+    
+    item.qty -= 1
+    
     val newDefense = max(state.armorDefense, item.def.defense)
     return state.copy(
         cash = state.cash - item.def.price,
         inventory = addItem(state.inventory, item.def.name, VendorType.ARMOR, 1, item.def.price),
         armorDefense = newDefense,
         message = "Bought ${item.def.name}. Defense is now ${newDefense}.",
+    )
+}
+
+private fun sellArmor(state: GameState, item: InventoryItem): GameState {
+    val armorDef = armorDefs.find { it.name == item.name } ?: return state
+    val sellPrice = armorDef.price / 2
+    val newInventory = removeOne(state.inventory, item.name)
+    val newDefense = newInventory.filter { it.type == VendorType.ARMOR }
+        .mapNotNull { inv -> armorDefs.find { it.name == inv.name }?.defense }
+        .maxOrNull() ?: 0
+    return state.copy(
+        cash = state.cash + sellPrice,
+        inventory = newInventory,
+        armorDefense = newDefense,
+        message = "Sold ${item.name} for $${sellPrice}. Defense is now ${newDefense}."
     )
 }
 
@@ -502,20 +577,43 @@ private fun repayDebt(state: GameState, amount: Int): GameState {
     if (payment <= 0) return state.copy(message = "No payment made.")
     val newDebt = state.debt - payment
     val mobster = if (newDebt == 0) {
-        state.mobster.copy(lastPenaltyStage = 0, latestThreat = "Vinnie counts the cash and backs off... for now.")
+        state.mobster.copy(debtDueDay = 0, lastPenaltyStage = 0, latestThreat = "Vinnie counts the cash and backs off... for now.")
     } else {
         state.mobster.copy(latestThreat = "Vinnie pockets $${payment}. You still owe $${newDebt} by day ${state.mobster.debtDueDay}.")
     }
     return state.copy(cash = state.cash - payment, debt = newDebt, mobster = mobster, message = "Paid Vinnie $${payment}.")
 }
 
-private fun healPlayer(state: GameState): GameState {
-    if (state.cash < 1000) return state.copy(message = "Not enough cash for the clinic.")
+private fun healPlayer(state: GameState, healAmt: Int): GameState {
+    if (healAmt <= 0) return state
+    val cost = healAmt * 100
+    if (state.cash < cost) return state.copy(message = "Not enough cash for the clinic.")
     if (state.health >= 100) return state.copy(message = "You're already at full health.")
+    val maxHeal = 100 - state.health
+    if (healAmt > maxHeal) return state.copy(message = "You can't overheal above 100.")
+    
     return state.copy(
-        cash = state.cash - 1000,
-        health = 100,
-        message = "The doctor patched you up for $1000. Back to 100 health."
+        cash = state.cash - cost,
+        health = state.health + healAmt,
+        message = "The doctor patched you up for $$cost. Health is now ${state.health + healAmt}."
+    )
+}
+
+private fun depositFunds(state: GameState, amount: Int): GameState {
+    if (amount <= 0 || state.cash < amount) return state.copy(message = "Not enough cash to deposit.")
+    return state.copy(
+        cash = state.cash - amount,
+        bankSavings = state.bankSavings + amount,
+        message = "Deposited $$amount into savings."
+    )
+}
+
+private fun withdrawFunds(state: GameState, amount: Int): GameState {
+    if (amount <= 0 || state.bankSavings < amount) return state.copy(message = "Not enough savings to withdraw.")
+    return state.copy(
+        cash = state.cash + amount,
+        bankSavings = state.bankSavings - amount,
+        message = "Withdrew $$amount from savings."
     )
 }
 
@@ -540,6 +638,7 @@ private fun applyMobsterPenalty(state: GameState): GameState {
                 eventLog = "Vinnie's crew catches you 1 day late and roughs you up.",
                 gameOver = newHealth <= 0,
                 message = if (newHealth <= 0) "Vinnie's first warning finished you." else "You are now overdue. Pay Vinnie.",
+                vinniePenaltyAmount = dmg,
             )
         }
         2 -> {
@@ -551,6 +650,7 @@ private fun applyMobsterPenalty(state: GameState): GameState {
                 eventLog = "3 days late. Vinnie shows up in person.",
                 gameOver = newHealth <= 0,
                 message = if (newHealth <= 0) "Vinnie took you out." else "Vinnie escalated the collection.",
+                vinniePenaltyAmount = dmg,
             )
         }
         3 -> {
@@ -562,6 +662,7 @@ private fun applyMobsterPenalty(state: GameState): GameState {
                 eventLog = "5 days late. Vinnie nearly kills you.",
                 gameOver = newHealth <= 0,
                 message = if (newHealth <= 0) "Vinnie finished the job." else "Barely alive. Pay him now.",
+                vinniePenaltyAmount = dmg,
             )
         }
         else -> state.copy(
@@ -570,6 +671,7 @@ private fun applyMobsterPenalty(state: GameState): GameState {
             mobster = state.mobster.copy(lastPenaltyStage = 4, latestThreat = "7 days late. Vinnie ends your run permanently."),
             eventLog = "7 days overdue. Vinnie ends your game.",
             message = "You stayed overdue too long.",
+            vinniePenaltyAmount = 100,
         )
     }
 }
@@ -592,6 +694,7 @@ private fun rollEncounter(state: GameState, nextVisit: CityVisit): EncounterStat
             text = "Cops in ${nextVisit.city.name} are cracking down on ${nextVisit.contraband}. Run or fight.",
             cityContraband = nextVisit.contraband,
         )
+        else -> null
     }
 }
 
@@ -624,29 +727,55 @@ private fun travelToChoice(state: GameState, cityName: String): GameState {
     )
     newState = applyMobsterPenalty(newState)
     if (newState.gameOver) return newState
-    val encounter = rollEncounter(newState, nextVisit)
+    var encounter = rollEncounter(newState, nextVisit)
+    if (encounter == null && nextVisit.plummetTarget != null) {
+        val snippet = listOf(
+            "A shady merchant whispers in your ear. '${nextVisit.plummetTarget} is practically worthless today. The market just fell out. Stock up if you can hold it.'",
+            "A twitchy guy in an alley pulls you aside. 'Hey, rumor has it everyone's dumping ${nextVisit.plummetTarget}. You can get it for dirt cheap right now.'",
+            "You overhear some smugglers arguing. 'I'm telling you, ${nextVisit.plummetTarget} prices just tanked! The suppliers panicked. Buy it while it's low!'",
+            "A hooded figure slides up next to you. 'Word on the street is ${nextVisit.plummetTarget} took a nosedive today. Get in before it normalizes.'"
+        ).random(seededRandom(state.day, state.cash, "tip"))
+
+        encounter = EncounterState(
+            type = EncounterType.PLUMMET,
+            title = "A street tip",
+            text = snippet,
+            cityContraband = nextVisit.contraband,
+            playerTurnText = "Got it."
+        )
+    }
     if (encounter == null) {
         val rng = seededRandom(state.day, state.cash, "cargo")
         if (rng.nextInt(100) < 15) {
             newState = newState.copy(
                 cargoCapacity = newState.cargoCapacity + 5,
-                eventLog = newState.eventLog + " You also found an abandoned storage unit! Cargo capacity increased by 5.",
+                activeEncounter = EncounterState(
+                    type = EncounterType.FREE_CARGO,
+                    title = "Lucky break",
+                    text = "You stumbled upon an abandoned storage unit! You snag some extra bags and straps. Cargo capacity increased by 5.",
+                    cityContraband = nextVisit.contraband,
+                    playerTurnText = "Got it."
+                ),
+                eventLog = newState.eventLog + " Found abandoned storage unit. Cargo capacity +5.",
                 message = "Cargo upgraded (+5) for free."
             )
         }
     }
     
     // Apply 5% daily interest on outstanding debt
-    if (newState.debt > 0) {
-        val newDebt = (newState.debt * 1.05).toInt()
-        newState = newState.copy(debt = newDebt)
-    }
+    val newBankSavings = if (newState.bankSavings > 0) (newState.bankSavings * 1.03).toInt() else newState.bankSavings
+    val newDebt = if (newState.debt > 0) (newState.debt * 1.05).toInt() else newState.debt
+    
+    newState = newState.copy(debt = newDebt, bankSavings = newBankSavings)
     
     return if (encounter != null) newState.copy(activeEncounter = encounter, message = encounter.title) else newState
 }
 
 private fun runFromEncounter(state: GameState): GameState {
     val encounter = state.activeEncounter ?: return state
+    if (encounter.type == EncounterType.FREE_CARGO || encounter.type == EncounterType.PLUMMET) {
+        return state.copy(activeEncounter = null, message = "Continuing journey.")
+    }
     val rng = seededRandom(state.day, encounter.title, state.cash, state.health)
     val success = rng.nextInt(100) < 50
     return if (success) {
@@ -705,6 +834,45 @@ private fun fightEncounter(state: GameState): GameState {
             message = "Fight won. Looted $${reward}.",
         )
     }
+    if (encounter.type == EncounterType.THIEVES) {
+        val rng = seededRandom(state.day, state.playerName, "thief_attack", state.health)
+        val willSteal = rng.nextInt(100) < 20
+        if (willSteal) {
+            val hasZipperPocket = state.inventory.any { it.name == "Zipper pocket" }
+            if (hasZipperPocket) {
+                return state.copy(
+                    health = state.health, 
+                    inventory = inventory,
+                    activeEncounter = encounter.copy(enemyHealth = enemyHealth, playerTurnText = "You dealt $actualDamage damage. The thieves tried to rob you, but your Zipper pocket kept your cargo safe!"),
+                    gameOver = false,
+                    message = "Fight continues. Robbery prevented!"
+                )
+            } else {
+                var cargo = inventory.filter { it.type == VendorType.COMMODITIES }
+                if (cargo.isNotEmpty()) {
+                    var dropMessage = ""
+                    val dropQty = max(1, rng.nextInt(1, 6)) // Steal 1-5 pieces
+                    val dropItem = cargo.random(rng)
+                    val actualDrop = min(dropItem.quantity, dropQty)
+                    inventory = if (dropItem.quantity <= actualDrop) {
+                        inventory.filter { it.name != dropItem.name }
+                    } else {
+                        inventory.map { if (it.name == dropItem.name) it.copy(quantity = it.quantity - actualDrop) else it }
+                    }
+                    dropMessage = " The thieves snatched $actualDrop ${dropItem.name} from your pockets!"
+                    
+                    return state.copy(
+                        health = state.health,
+                        inventory = inventory,
+                        activeEncounter = encounter.copy(enemyHealth = enemyHealth, playerTurnText = "You dealt $actualDamage damage.$dropMessage"),
+                        gameOver = false,
+                        message = "Fight continues. You were robbed."
+                    )
+                }
+            }
+        }
+    }
+
     val enemyDamage = if (encounter.type == EncounterType.COPS) COP_DAMAGE else THIEF_DAMAGE
     val reduced = max(1, enemyDamage - state.armorDefense)
     val newHealth = max(0, state.health - reduced)
@@ -872,7 +1040,7 @@ fun TheDopestDealsApp() {
             s.cash, s.debt, s.health, s.cargoCapacity, s.armorDefense,
             saveInventory(s.inventory), s.currentVisit.city.name, s.message, s.eventLog,
             saveMobster(s.mobster), saveScores(s.leaderboard), saveEncounter(s.activeEncounter),
-            s.mobster.dailyBorrowed
+            s.mobster.dailyBorrowed, s.vinniePenaltyAmount, s.bankSavings
         )
         return org.json.JSONArray(list).toString()
     }
@@ -889,7 +1057,8 @@ fun TheDopestDealsApp() {
                 armorDefense = a.getInt(9), inventory = loadInventory(a.getString(10)),
                 currentVisit = generateCityVisit(city, day), message = a.getString(12),
                 eventLog = a.getString(13), mobster = loadMobster(a.getString(14)).copy(dailyBorrowed = a.optInt(17, 0)),
-                leaderboard = loadScores(a.getString(15)), activeEncounter = loadEncounter(a.getString(16))
+                leaderboard = loadScores(a.getString(15)), activeEncounter = loadEncounter(a.getString(16)),
+                vinniePenaltyAmount = a.optInt(18, 0), bankSavings = a.optInt(19, 0)
             )
         } catch (e: Exception) { return GameState(leaderboard = loadedScores) }
     }
@@ -948,16 +1117,56 @@ fun TheDopestDealsApp() {
     var marketTab by rememberSaveable { mutableStateOf(0) }
     var vinnieBorrowInput by rememberSaveable { mutableStateOf("") }
     var vinnieRepayInput by rememberSaveable { mutableStateOf("") }
+    var bankDepositInput by rememberSaveable { mutableStateOf("") }
+    var bankWithdrawInput by rememberSaveable { mutableStateOf("") }
+
+    var showOptionsMenu by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
+        topBar = {
+            if (state.started) {
+                @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+                androidx.compose.material3.TopAppBar(
+                    title = { Text("The Dopest Deals", color = Color.White, fontWeight = FontWeight.Bold) },
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF17202B)),
+                    actions = {
+                        androidx.compose.material3.IconButton(onClick = { showOptionsMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White)
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showOptionsMenu,
+                            onDismissRequest = { showOptionsMenu = false },
+                            modifier = Modifier.background(Color(0xFF2A3442))
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(if (isMuted) "Unmute Sounds" else "Mute Sounds", color = Color.White) },
+                                onClick = {
+                                    isMuted = !isMuted
+                                    prefs.edit().putBoolean("is_muted", isMuted).apply()
+                                    showOptionsMenu = false
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Restart Game", color = Color(0xFFEF9A9A)) },
+                                onClick = {
+                                    currentTab = 0
+                                    state = GameState(leaderboard = state.leaderboard)
+                                    showOptionsMenu = false
+                                }
+                            )
+                        }
+                    }
+                )
+            }
+        },
         bottomBar = {
             if (state.started) {
                 NavigationBar(containerColor = Color(0xFF17202B)) {
                     NavigationBarItem(selected = currentTab == 0, onClick = { currentTab = 0 }, icon = { Icon(Icons.Default.Favorite, "") }, label = { Text("Status") })
                     NavigationBarItem(selected = currentTab == 1, onClick = { currentTab = 1 }, icon = { Icon(Icons.Default.Storefront, "") }, label = { Text("Market") })
-                    NavigationBarItem(selected = currentTab == 2, onClick = { currentTab = 2 }, icon = { Icon(Icons.Default.Gavel, "") }, label = { Text("Vinnie") })
-                    NavigationBarItem(selected = currentTab == 3, onClick = { currentTab = 3 }, icon = { Icon(Icons.Default.LocalHospital, "") }, label = { Text("Doctor") })
-                    NavigationBarItem(selected = currentTab == 4, onClick = { currentTab = 4 }, icon = { Icon(Icons.Default.Settings, "") }, label = { Text("Options") })
+                    NavigationBarItem(selected = currentTab == 2, onClick = { currentTab = 2 }, icon = { Icon(Icons.Default.AttachMoney, "") }, label = { Text("Vinnie") })
+                    NavigationBarItem(selected = currentTab == 3, onClick = { currentTab = 3 }, icon = { Icon(Icons.Default.AccountBalance, "") }, label = { Text("Bank") })
+                    NavigationBarItem(selected = currentTab == 4, onClick = { currentTab = 4 }, icon = { Icon(Icons.Default.LocalHospital, "") }, label = { Text("Doctor") })
                 }
             }
         }
@@ -987,7 +1196,7 @@ fun TheDopestDealsApp() {
                         CityCard(state)
                     }
                     1 -> { // Market Tab (Merged with Cargo)
-                        InventoryCard(state) { state = sellCommodity(state, it) }
+                        InventoryCard(state) { item, qty -> state = sellCommodity(state, item, qty) }
                         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(selected = marketTab == 0, onClick = { marketTab = 0 }, label = { Text("Commodities") })
@@ -996,10 +1205,15 @@ fun TheDopestDealsApp() {
                             }
                             Text("Cash: $${state.cash}", color = Color(0xFFA5D6A7), fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 4.dp))
                         }
+                        if (state.message.isNotEmpty()) {
+                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF3E2723))) {
+                                Text(state.message, color = Color(0xFFFFAB91), fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp).fillMaxWidth(), fontSize = 14.sp)
+                            }
+                        }
                         when (marketTab) {
-                            0 -> CommodityVendorCard(state) { market -> state = buyCommodity(state, market) }
+                            0 -> CommodityVendorCard(state) { market, qty -> state = buyCommodity(state, market, qty) }
                             1 -> WeaponVendorCard(state, onBuyWeapon = { state = buyWeapon(state, it) }, onBuyAmmo = { state = buyAmmo(state, it) })
-                            2 -> ArmorVendorCard(state) { state = buyArmor(state, it) }
+                            2 -> ArmorVendorCard(state, onBuyArmor = { state = buyArmor(state, it) }, onSellArmor = { state = sellArmor(state, it) })
                         }
                     }
                     2 -> { // Vinnie Tab
@@ -1019,27 +1233,25 @@ fun TheDopestDealsApp() {
                             }
                         )
                     }
-                    3 -> { // Doctor Tab
-                        DoctorCard(state) { state = healPlayer(state) }
-                    }
-                    4 -> { // Options / Setup / Game Over state
-                        OptionsCard(
-                            isMuted = isMuted,
-                            onMuteToggle = {
-                                isMuted = !isMuted
-                                prefs.edit().putBoolean("is_muted", isMuted).apply()
+                    3 -> { // Banker Tab
+                        BankerCard(
+                            state = state,
+                            depositInput = bankDepositInput,
+                            onDepositInputChange = { bankDepositInput = it },
+                            withdrawInput = bankWithdrawInput,
+                            onWithdrawInputChange = { bankWithdrawInput = it },
+                            onDeposit = { amount -> 
+                                state = depositFunds(state, amount)
+                                bankDepositInput = ""
                             },
-                            onRestart = {
-                                currentTab = 0
-                                state = GameState(leaderboard = state.leaderboard)
+                            onWithdraw = { amount -> 
+                                state = withdrawFunds(state, amount)
+                                bankWithdrawInput = ""
                             }
                         )
-                        if (state.gameOver) {
-                            SetupCard(state = state, nameInput = nameInput, onNameChange = { nameInput = it.take(18) }, onSelectLength = { state = state.copy(selectedLength = it) }, onStart = { 
-                                currentTab = 0
-                                beginRun() 
-                            })
-                        }
+                    }
+                    4 -> { // Doctor Tab
+                        DoctorCard(state) { amt -> state = healPlayer(state, amt) }
                     }
                 }
             }
@@ -1047,7 +1259,25 @@ fun TheDopestDealsApp() {
     }
 
     if (state.activeEncounter != null) {
-        EncounterCard(state = state, onRun = { state = runFromEncounter(state) }, onFight = { state = fightEncounter(state) })
+        EncounterCard(state = state, onRun = {
+            val oldHealth = state.health
+            val newState = runFromEncounter(state)
+            if (newState.health < oldHealth && !prefs.getBoolean("is_muted", false)) {
+                MediaPlayer.create(context, R.raw.punch)?.start()
+            }
+            state = newState
+        }, onFight = { state = fightEncounter(state) })
+    }
+    
+    if (state.vinniePenaltyAmount > 0 && !state.gameOver) {
+        VinniePenaltyDialog(amount = state.vinniePenaltyAmount, onAcknowledge = { state = state.copy(vinniePenaltyAmount = 0) })
+    }
+
+    if (state.gameOver && state.started) {
+        GameOverDialog(state = state, onRetry = {
+            currentTab = 0
+            state = GameState(leaderboard = state.leaderboard)
+        })
     }
 }
 
@@ -1127,7 +1357,7 @@ private fun MobsterCard(
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
             )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.Gavel, contentDescription = null, tint = Color(0xFFFF8A65))
+                Icon(Icons.Default.AttachMoney, contentDescription = null, tint = Color(0xFFFF8A65))
                 Text("Vinnie", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             }
             StatLine("Due day", state.mobster.debtDueDay.toString())
@@ -1187,7 +1417,8 @@ private fun MobsterCard(
 }
 
 @Composable
-private fun DoctorCard(state: GameState, onHeal: () -> Unit) {
+private fun DoctorCard(state: GameState, onHeal: (Int) -> Unit) {
+    var amountInput by remember(state.health) { mutableStateOf(max(0, 100 - state.health).toString()) }
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF222B27))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Image(
@@ -1203,7 +1434,7 @@ private fun DoctorCard(state: GameState, onHeal: () -> Unit) {
             val snark = remember(state.day) {
                 listOf(
                     "\"No questions asked. Just cash on the table.\"",
-                    "\"You look terrible. But for $1000, I can fix that.\"",
+                    "\"You look terrible. But for enough cash, I can fix that.\"",
                     "\"I don't care how you got shot, as long as you pay.\"",
                     "\"My license expired in '04, but my hands are steady.\""
                 ).random()
@@ -1211,12 +1442,98 @@ private fun DoctorCard(state: GameState, onHeal: () -> Unit) {
             Text(snark, color = Color(0xFFA5D6A7), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
             HorizontalDivider(color = Color(0xFF2F3C36))
             
-            Text("Full healing costs $1000. You have ${state.health} / 100 health.", color = Color(0xFFD0D7DE))
-            Button(
-                onClick = onHeal, 
-                enabled = !state.gameOver && state.activeEncounter == null && state.cash >= 1000 && state.health < 100, 
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Heal to 100 HP ($1000)") }
+            val amountToHeal = amountInput.toIntOrNull() ?: 0
+            val cost = amountToHeal * 100
+            
+            Text("Healing costs $100 per HP. You have ${state.health} / 100 health.", color = Color(0xFFD0D7DE))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = { newValue -> if (newValue.all { it.isDigit() }) amountInput = newValue },
+                    label = { Text("HP to Heal") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { onHeal(amountToHeal) }, 
+                    enabled = !state.gameOver && state.activeEncounter == null && state.cash >= cost && amountToHeal > 0 && (state.health + amountToHeal) <= 100, 
+                    modifier = Modifier.weight(1f)
+                ) { Text("Heal ($$cost)") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BankerCard(
+    state: GameState,
+    depositInput: String, onDepositInputChange: (String) -> Unit,
+    withdrawInput: String, onWithdrawInputChange: (String) -> Unit,
+    onDeposit: (Int) -> Unit, onWithdraw: (Int) -> Unit
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2835))) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(
+                painter = painterResource(id = R.drawable.banker_portrait),
+                contentDescription = "Portrait of a shady bank teller",
+                modifier = Modifier.fillMaxWidth().height(250.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF81D4FA))
+                Text("Underground Vault", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+            val snark = remember(state.day) {
+                listOf(
+                    "\"We wash it, we hold it, we take a cut. Safest place in the city.\"",
+                    "\"Your money makes money here. Just don't ask where it comes from.\"",
+                    "\"We guarantee 3% daily returns. The feds guarantee 0. You do the math.\""
+                ).random()
+            }
+            Text(snark, color = Color(0xFFB3E5FC), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            HorizontalDivider(color = Color(0xFF324156))
+            
+            Text("Your Savings: $${state.bankSavings}", color = Color(0xFFA5D6A7), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Earns 3% compounded interest daily.", color = Color(0xFFCFD8DC), fontSize = 12.sp)
+
+            if (!state.gameOver) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val amountToDeposit = depositInput.toIntOrNull() ?: 0
+                    OutlinedTextField(
+                        value = depositInput,
+                        onValueChange = { newValue -> if (newValue.all { it.isDigit() }) onDepositInputChange(newValue) },
+                        label = { Text("Deposit ($)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { onDeposit(amountToDeposit) }, 
+                        enabled = state.cash >= amountToDeposit && amountToDeposit > 0 && state.activeEncounter == null, 
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Deposit") }
+                }
+
+                if (state.bankSavings > 0) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val amountToWithdraw = withdrawInput.toIntOrNull() ?: 0
+                        OutlinedTextField(
+                            value = withdrawInput,
+                            onValueChange = { newValue -> if (newValue.all { it.isDigit() }) onWithdrawInputChange(newValue) },
+                            label = { Text("Withdraw ($)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = { onWithdraw(amountToWithdraw) }, 
+                            enabled = state.bankSavings >= amountToWithdraw && amountToWithdraw > 0 && state.activeEncounter == null, 
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Withdraw") }
+                    }
+                }
+            }
         }
     }
 }
@@ -1262,6 +1579,54 @@ private fun EncounterCard(state: GameState, onRun: () -> Unit, onFight: () -> Un
                     }
                 }
                 HorizontalDivider(color = Color(0xFF452828))
+            } else if (encounter.type == EncounterType.THIEVES) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.thief_portrait),
+                        contentDescription = "Portrait of a grimy thief",
+                        modifier = Modifier.weight(0.34f)
+                    )
+                    Column(modifier = Modifier.weight(0.66f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFCC80))
+                            Text(encounter.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        Text(encounter.text, color = Color(0xFFFFE0B2))
+                    }
+                }
+                HorizontalDivider(color = Color(0xFF452828))
+            } else if (encounter.type == EncounterType.FREE_CARGO) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.cargo_upgrade_man),
+                        contentDescription = "Portrait of man finding cargo",
+                        modifier = Modifier.weight(0.34f)
+                    )
+                    Column(modifier = Modifier.weight(0.66f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = Color(0xFFA5D6A7))
+                            Text(encounter.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        Text(encounter.text, color = Color(0xFFC8E6C9))
+                    }
+                }
+                HorizontalDivider(color = Color(0xFF452828))
+            } else if (encounter.type == EncounterType.PLUMMET) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.commodity_plummet),
+                        contentDescription = "Portrait of shady merchant",
+                        modifier = Modifier.weight(0.34f)
+                    )
+                    Column(modifier = Modifier.weight(0.66f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Storefront, contentDescription = null, tint = Color(0xFFBCAAA4))
+                            Text(encounter.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        Text(encounter.text, color = Color(0xFFD7CCC8))
+                    }
+                }
+                HorizontalDivider(color = Color(0xFF452828))
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFCC80))
@@ -1270,12 +1635,17 @@ private fun EncounterCard(state: GameState, onRun: () -> Unit, onFight: () -> Un
                 Text(encounter.text, color = Color(0xFFFFE0B2))
             }
             
-            StatLine("Enemy health", encounter.enemyHealth.toString())
-            Text(if (encounter.type == EncounterType.COPS) "Cops take half damage from your attacks." else "Thieves take full damage.", color = Color(0xFFB0BEC5))
-            if (encounter.playerTurnText.isNotBlank()) Text(encounter.playerTurnText, color = Color(0xFF90CAF9))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onRun, enabled = !state.gameOver) { Text("Run") }
-                Button(onClick = onFight, enabled = !state.gameOver) { Text("Fight") }
+            if (encounter.type != EncounterType.FREE_CARGO && encounter.type != EncounterType.PLUMMET) {
+                StatLine("Enemy health", encounter.enemyHealth.toString())
+                Text(if (encounter.type == EncounterType.COPS) "Cops take half damage from your attacks." else "Thieves take full damage.", color = Color(0xFFB0BEC5))
+                if (encounter.playerTurnText.isNotBlank()) Text(encounter.playerTurnText, color = Color(0xFF90CAF9))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onRun, enabled = !state.gameOver) { Text("Run") }
+                    Button(onClick = onFight, enabled = !state.gameOver) { Text("Fight") }
+                }
+            } else {
+                val btnText = if (encounter.type == EncounterType.PLUMMET) "Sweet, Thanks" else "Continue"
+                Button(onClick = onRun, modifier = Modifier.fillMaxWidth()) { Text(btnText) }
             }
         }
     }
@@ -1293,22 +1663,53 @@ private fun ActionCard(state: GameState, onTravel: () -> Unit) {
 }
 
 @Composable
-private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity) -> Unit) {
+private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) -> Unit) {
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("dopest_deals", Context.MODE_PRIVATE)
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF16222E))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.Storefront, contentDescription = null, tint = Color(0xFF80DEEA))
-                Text("Shady street sellers", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.Storefront, contentDescription = null, tint = Color(0xFF80DEEA))
+                    Text("Shady street sellers", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+                Text("Cargo: ${state.cargoCapacity - state.freeCargo()}/${state.cargoCapacity}", color = Color(0xFFD0D7DE), fontWeight = FontWeight.Medium)
             }
             state.currentVisit.commodities.forEach { item ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(item.def.name, color = Color.White, fontWeight = FontWeight.SemiBold)
-                        Text("$${item.price}", color = Color(0xFFB3E5FC))
+                androidx.compose.runtime.key(item.def.name) {
+                    var qtyInput by remember { mutableStateOf("1") }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(item.def.name, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("$${item.price} • Stock: ${item.qty}", color = Color(0xFFB3E5FC))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = qtyInput,
+                                onValueChange = { str -> qtyInput = str.filter { it.isDigit() } },
+                                modifier = Modifier.width(60.dp).height(50.dp),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            Button(
+                                onClick = { 
+                                    val qty = qtyInput.toIntOrNull() ?: 0
+                                    val safeQty = min(qty, item.qty)
+                                    if (safeQty > 0) {
+                                        if (state.cash >= (item.price * safeQty) && state.freeCargo() >= safeQty && !prefs.getBoolean("is_muted", false)) {
+                                            MediaPlayer.create(context, R.raw.cash_register)?.start()
+                                            MediaPlayer.create(context, R.raw.chuckle)?.start()
+                                        }
+                                        onBuy(item, safeQty)
+                                        qtyInput = "1"
+                                    }
+                                }, 
+                                enabled = item.qty > 0 && !state.gameOver && state.activeEncounter == null
+                            ) { Text("Buy") }
+                        }
                     }
-                    Button(onClick = { onBuy(item) }, enabled = state.cash >= item.price && state.freeCargo() > 0 && !state.gameOver && state.activeEncounter == null) { Text("Buy 1") }
+                    HorizontalDivider(color = Color(0xFF2A3442))
                 }
-                HorizontalDivider(color = Color(0xFF2A3442))
             }
         }
     }
@@ -1331,13 +1732,13 @@ private fun WeaponVendorCard(state: GameState, onBuyWeapon: (MarketWeapon) -> Un
                             Text(item.def.name, color = Color.White, fontWeight = FontWeight.SemiBold)
                             Text("Damage ${item.def.damage} • $${item.price}", color = Color(0xFFB3E5FC))
                         }
-                        Button(onClick = { onBuyWeapon(item) }, enabled = state.cash >= item.price && !state.gameOver && state.activeEncounter == null) { Text("Buy") }
+                        Button(onClick = { onBuyWeapon(item) }, enabled = item.qty > 0 && state.cash >= item.price && !state.gameOver && state.activeEncounter == null) { Text("Buy") }
                     }
                     val ammo = state.currentVisit.ammoStock.firstOrNull { it.weaponName == item.def.name }
                     if (ammo != null) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("${ammo.ammoName} • $${ammo.price} ea", color = Color(0xFFD7CCC8))
-                            Button(onClick = { onBuyAmmo(ammo) }, enabled = state.cash >= ammo.price && !state.gameOver && state.activeEncounter == null) { Text("Buy 1") }
+                            Button(onClick = { onBuyAmmo(ammo) }, enabled = ammo.qty > 0 && state.cash >= ammo.price && !state.gameOver && state.activeEncounter == null) { Text("Buy 1") }
                         }
                     }
                     HorizontalDivider(color = Color(0xFF2A3442))
@@ -1348,7 +1749,7 @@ private fun WeaponVendorCard(state: GameState, onBuyWeapon: (MarketWeapon) -> Un
 }
 
 @Composable
-private fun ArmorVendorCard(state: GameState, onBuyArmor: (MarketArmor) -> Unit) {
+private fun ArmorVendorCard(state: GameState, onBuyArmor: (MarketArmor) -> Unit, onSellArmor: (InventoryItem) -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2026))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Armor vendor", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -1359,11 +1760,31 @@ private fun ArmorVendorCard(state: GameState, onBuyArmor: (MarketArmor) -> Unit)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(item.def.name, color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Text("Defense ${item.def.defense} • $${item.def.price}", color = Color(0xFFB3E5FC))
+                            val fannyPackText = if (item.def.name == "Fanny pack") "\nPrevents Cargo Theft" else ""
+                            Text("Defense ${item.def.defense} • $${item.def.price}$fannyPackText", color = Color(0xFFB3E5FC))
                         }
-                        Button(onClick = { onBuyArmor(item) }, enabled = state.cash >= item.def.price && !state.gameOver && state.activeEncounter == null) { Text("Buy") }
+                        Button(onClick = { onBuyArmor(item) }, enabled = item.qty > 0 && state.cash >= item.def.price && !state.gameOver && state.activeEncounter == null) { Text("Buy") }
                     }
                     HorizontalDivider(color = Color(0xFF2A3442))
+                }
+                
+                val ownedArmor = state.inventory.filter { it.type == VendorType.ARMOR }
+                if (ownedArmor.isNotEmpty()) {
+                    Text("Your Armor", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    ownedArmor.forEach { item ->
+                        val armorDef = armorDefs.find { it.name == item.name }
+                        if (armorDef != null) {
+                            val sellPrice = armorDef.price / 2
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item.name, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                    Text("Sell for $${sellPrice}", color = Color(0xFFB3E5FC))
+                                }
+                                Button(onClick = { onSellArmor(item) }, enabled = !state.gameOver && state.activeEncounter == null) { Text("Sell") }
+                            }
+                            HorizontalDivider(color = Color(0xFF2A3442))
+                        }
+                    }
                 }
             }
         }
@@ -1371,7 +1792,9 @@ private fun ArmorVendorCard(state: GameState, onBuyArmor: (MarketArmor) -> Unit)
 }
 
 @Composable
-private fun InventoryCard(state: GameState, onSell: (InventoryItem) -> Unit) {
+private fun InventoryCard(state: GameState, onSell: (InventoryItem, Int) -> Unit) {
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("dopest_deals", Context.MODE_PRIVATE)
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2330))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1382,21 +1805,45 @@ private fun InventoryCard(state: GameState, onSell: (InventoryItem) -> Unit) {
                 Text("Nothing in inventory.", color = Color(0xFFCFD8DC))
             } else {
                 state.inventory.forEach { item ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("${item.name} x${item.quantity}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Text("Avg cost $${item.avgCost}", color = Color(0xFFB0BEC5))
-                        }
-                        if (item.type == VendorType.COMMODITIES) {
-                            val localPrice = state.currentVisit.commodities.firstOrNull { it.def.name == item.name }?.price
-                            if (localPrice != null) {
-                                Button(onClick = { onSell(item) }, enabled = !state.gameOver && state.activeEncounter == null) { Text("Sell 1 ($$localPrice)") }
-                            } else {
-                                Button(onClick = { }, enabled = false) { Text("No buyers here") }
+                    androidx.compose.runtime.key(item.name) {
+                        var qtyInput by remember { mutableStateOf("1") }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("${item.name} x${item.quantity}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Text("Avg cost $${item.avgCost}", color = Color(0xFFB0BEC5))
+                            }
+                            if (item.type == VendorType.COMMODITIES) {
+                                val localPrice = state.currentVisit.commodities.firstOrNull { it.def.name == item.name }?.price
+                                if (localPrice != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedTextField(
+                                            value = qtyInput,
+                                            onValueChange = { str -> qtyInput = str.filter { it.isDigit() } },
+                                            modifier = Modifier.width(60.dp).height(50.dp),
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                        )
+                                        Button(
+                                            onClick = { 
+                                                val qty = qtyInput.toIntOrNull() ?: 0
+                                                if (qty > 0) {
+                                                    if (!prefs.getBoolean("is_muted", false)) {
+                                                        MediaPlayer.create(context, R.raw.cash_register)?.start()
+                                                    }
+                                                    onSell(item, qty)
+                                                    qtyInput = "1"
+                                                }
+                                            }, 
+                                            enabled = !state.gameOver && state.activeEncounter == null
+                                        ) { Text("Sell ($$localPrice)") }
+                                    }
+                                } else {
+                                    Button(onClick = { }, enabled = false) { Text("No buyers here") }
+                                }
                             }
                         }
+                        HorizontalDivider(color = Color(0xFF2A3442))
                     }
-                    HorizontalDivider(color = Color(0xFF2A3442))
                 }
             }
             val best = bestWeapon(state)
@@ -1461,6 +1908,61 @@ private fun OptionsCard(isMuted: Boolean, onMuteToggle: () -> Unit, onRestart: (
             }
             Button(onClick = { (context as? android.app.Activity)?.finish() }, modifier = Modifier.fillMaxWidth()) {
                 Text("Exit Game")
+            }
+        }
+    }
+}
+
+@Composable
+private fun VinniePenaltyDialog(amount: Int, onAcknowledge: () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { }, 
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+    ) {
+        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF301C1C))) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.vinnie_portrait),
+                        contentDescription = "Vinnie Moretti",
+                        modifier = Modifier.weight(0.34f)
+                    )
+                    Column(modifier = Modifier.weight(0.66f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350))
+                            Text("Vinnie's Collection", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        Text("You're late on your payments. Vinnie's guys roughed you up.", color = Color(0xFFFFCC80))
+                    }
+                }
+                Text("Took $amount damage. Pay your debt before it happens again.", color = Color(0xFFCFD8DC))
+                Button(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
+                    Text("Understood")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GameOverDialog(state: GameState, onRetry: () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = { }, 
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+    ) {
+        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1B1B1B))) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(48.dp))
+                Text("GAME OVER", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp)
+                val isDeath = state.health <= 0
+                Text(
+                    text = if (isDeath) "Your health depleted entirely. You didn't make it to the end of your run." else "You successfully completed your ${state.selectedLength.days} day run! Your final net worth is $${state.netWorth()}.",
+                    color = Color(0xFFCFD8DC), 
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                    Text("Retry / Start New Run")
+                }
             }
         }
     }
