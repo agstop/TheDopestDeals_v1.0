@@ -1764,7 +1764,7 @@ private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.Storefront, contentDescription = null, tint = Color(0xFF80DEEA))
-                    Text("Shady street sellers", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text("Street Dealers", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
                 Text("Stash: ${state.stashCapacity - state.freeStash()}/${state.stashCapacity}", color = Color(0xFFD0D7DE), fontWeight = FontWeight.Medium)
             }
@@ -1794,7 +1794,7 @@ private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) 
                                             val mp = MediaPlayer.create(context, buySounds.random())
                                             mp?.let {
                                                 val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                                enhancer.setTargetGain(2600)
+                                                enhancer.setTargetGain(1800)
                                                 enhancer.enabled = true
                                                 it.setOnCompletionListener { player ->
                                                     enhancer.release()
@@ -1935,7 +1935,7 @@ private fun InventoryCard(state: GameState, onSell: (InventoryItem, Int) -> Unit
                                                         val mp = MediaPlayer.create(context, sellSounds.random())
                                             mp?.let {
                                                 val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                                enhancer.setTargetGain(2600)
+                                                enhancer.setTargetGain(1800)
                                                 enhancer.enabled = true
                                                 it.setOnCompletionListener { player ->
                                                     enhancer.release()
