@@ -1543,6 +1543,7 @@ private fun MobsterCard(
     onBorrow: (Int) -> Unit, 
     onRepay: (Int) -> Unit
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1F1F))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Image(
@@ -1580,10 +1581,14 @@ private fun MobsterCard(
                         onValueChange = { newValue -> if (newValue.all { it.isDigit() }) onBorrowInputChange(newValue) },
                         label = { Text("Borrow ($)") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                         modifier = Modifier.weight(1f)
                     )
                     Button(
-                        onClick = { onBorrow(amountToBorrow) }, 
+                        onClick = { 
+                            onBorrow(amountToBorrow)
+                            focusManager.clearFocus()
+                        }, 
                         enabled = state.activeEncounter == null && amountToBorrow > 0, 
                         modifier = Modifier.weight(1f)
                     ) { Text("Borrow") }
@@ -1597,10 +1602,14 @@ private fun MobsterCard(
                             onValueChange = { newValue -> if (newValue.all { it.isDigit() }) onRepayInputChange(newValue) },
                             label = { Text("Amount ($)") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                         Button(
-                            onClick = { onRepay(amountToPay) }, 
+                            onClick = { 
+                                onRepay(amountToPay) 
+                                focusManager.clearFocus()
+                            }, 
                             enabled = state.cash > 0 && amountToPay > 0 && amountToPay <= state.cash && state.activeEncounter == null,
                             modifier = Modifier.weight(1f)
                         ) { Text("Pay") }
@@ -1613,6 +1622,7 @@ private fun MobsterCard(
 
 @Composable
 private fun DoctorCard(state: GameState, onHeal: (Int) -> Unit) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var amountInput by remember(state.health) { mutableStateOf(max(0, 100 - state.health).toString()) }
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF222B27))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1651,7 +1661,10 @@ private fun DoctorCard(state: GameState, onHeal: (Int) -> Unit) {
                     modifier = Modifier.weight(1f)
                 )
                 Button(
-                    onClick = { onHeal(amountToHeal) }, 
+                    onClick = { 
+                        onHeal(amountToHeal)
+                        focusManager.clearFocus()
+                    }, 
                     enabled = !state.gameOver && state.activeEncounter == null && state.cash >= cost && amountToHeal > 0 && (state.health + amountToHeal) <= 100, 
                     modifier = Modifier.weight(1f)
                 ) { Text("Heal ($$cost)") }
@@ -1667,6 +1680,7 @@ private fun BankerCard(
     withdrawInput: String, onWithdrawInputChange: (String) -> Unit,
     onDeposit: (Int) -> Unit, onWithdraw: (Int) -> Unit
 ) {
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2835))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Image(
@@ -1701,16 +1715,22 @@ private fun BankerCard(
                         onValueChange = { newValue -> if (newValue.all { it.isDigit() }) onDepositInputChange(newValue) },
                         label = { Text("Deposit ($)") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                         modifier = Modifier.weight(1f)
                     )
                     Button(
-                        onClick = { onDeposit(amountToDeposit) }, 
+                        onClick = { 
+                            onDeposit(amountToDeposit)
+                            focusManager.clearFocus()
+                        }, 
                         enabled = state.cash >= amountToDeposit && amountToDeposit > 0 && state.activeEncounter == null, 
                         modifier = Modifier.weight(0.7f)
                     ) { Text("Deposit") }
                     Button(
-                        onClick = { onDeposit(state.cash) },
+                        onClick = { 
+                            onDeposit(state.cash)
+                            focusManager.clearFocus()
+                        },
                         enabled = state.cash > 0 && state.activeEncounter == null,
                         modifier = Modifier.weight(0.6f)
                     ) { Text("Max") }
@@ -1724,16 +1744,22 @@ private fun BankerCard(
                             onValueChange = { newValue -> if (newValue.all { it.isDigit() }) onWithdrawInputChange(newValue) },
                             label = { Text("Withdraw ($)") },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                         Button(
-                            onClick = { onWithdraw(amountToWithdraw) }, 
+                            onClick = { 
+                                onWithdraw(amountToWithdraw)
+                                focusManager.clearFocus()
+                            }, 
                             enabled = state.bankSavings >= amountToWithdraw && amountToWithdraw > 0 && state.activeEncounter == null, 
                             modifier = Modifier.weight(0.7f)
                         ) { Text("Withdraw") }
                         Button(
-                            onClick = { onWithdraw(state.bankSavings) },
+                            onClick = { 
+                                onWithdraw(state.bankSavings)
+                                focusManager.clearFocus()
+                            },
                             enabled = state.bankSavings > 0 && state.activeEncounter == null,
                             modifier = Modifier.weight(0.6f)
                         ) { Text("Max") }
@@ -1933,6 +1959,7 @@ private fun ActionCard(state: GameState, onTravel: () -> Unit) {
 private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) -> Unit) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("dopest_deals", Context.MODE_PRIVATE)
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF16222E))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1979,6 +2006,7 @@ private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) 
                                         }
                                         onBuy(item, safeQty)
                                         qtyInput = "1"
+                                        focusManager.clearFocus()
                                     }
                                 }, 
                                 enabled = item.qty > 0 && !state.gameOver && state.activeEncounter == null
@@ -2072,6 +2100,7 @@ private fun ArmorVendorCard(state: GameState, onBuyArmor: (MarketArmor) -> Unit,
 private fun InventoryCard(state: GameState, onSell: (InventoryItem, Int) -> Unit) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("dopest_deals", Context.MODE_PRIVATE)
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2330))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2098,7 +2127,7 @@ private fun InventoryCard(state: GameState, onSell: (InventoryItem, Int) -> Unit
                                             onValueChange = { str -> qtyInput = str.filter { it.isDigit() } },
                                             modifier = Modifier.width(60.dp).height(50.dp),
                                             singleLine = true,
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
                                         )
                                         Button(
                                             onClick = { 
@@ -2120,6 +2149,7 @@ private fun InventoryCard(state: GameState, onSell: (InventoryItem, Int) -> Unit
                                                     }
                                                     onSell(item, qty)
                                                     qtyInput = "1"
+                                                    focusManager.clearFocus()
                                                 }
                                             }, 
                                             enabled = !state.gameOver && state.activeEncounter == null
