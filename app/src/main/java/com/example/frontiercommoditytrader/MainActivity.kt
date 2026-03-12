@@ -1560,16 +1560,7 @@ private fun MobsterCard(
             StatLine("Past due", state.overdueDays().toString())
             HorizontalDivider(color = Color(0xFF3E2C2C))
             
-            val snark = remember(state.day) {
-                        listOf(
-                            "\"You got my money? Interest is 5% a day. Don't make me wait.\"",
-                            "\"I ain't a charity. Pay up or my boys pay you a visit.\"",
-                            "\"Don't think about running. We got long arms.\"",
-                            "\"It's just business, kid. But I make it personal when you're late.\""
-                        ).random()
-                    }
-            Text(snark, color = Color(0xFFFFAB91), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-            Text(state.mobster.latestThreat, color = Color(0xFFFFCCBC))
+
             Text("He waits 10 full days before you are late. Penalties hit at 1, 3, 5, and 7 days overdue.", color = Color(0xFFEF9A9A), fontSize = 12.sp)
             
             if (!state.gameOver) {
