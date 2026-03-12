@@ -724,16 +724,25 @@ private fun paySpeedingFine(state: GameState): GameState {
 
 private fun acceptSearch(state: GameState): GameState {
     val encounter = state.activeEncounter ?: return state
-    val contraband = encounter.cityContraband
-    val hadContraband = state.inventory.any { it.name == contraband && it.type == VendorType.COMMODITIES }
-    val newInventory = state.inventory.filter { !(it.name == contraband && it.type == VendorType.COMMODITIES) }
-    val msg = if (hadContraband) "Cops found your $contraband and confiscated it all!" else "Cops searched your vehicle and found nothing. You're free to go."
-    return state.copy(
-        inventory = newInventory,
-        activeEncounter = null,
-        message = msg,
-        eventLog = if (hadContraband) "Lost all $contraband to a police search." else "Passed a vehicle search clean."
-    )
+    val hasDrugs = state.inventory.any { it.type == VendorType.COMMODITIES }
+    return if (hasDrugs) {
+        val newInventory = state.inventory.filter { it.type != VendorType.COMMODITIES }
+        val fine = 500
+        val newCash = max(0, state.cash - fine)
+        state.copy(
+            inventory = newInventory,
+            cash = newCash,
+            activeEncounter = null,
+            message = "Cops found your stash! They confiscated all your drugs and fined you $500.",
+            eventLog = "Lost all drugs and fined $500 in a vehicle search."
+        )
+    } else {
+        state.copy(
+            activeEncounter = null,
+            message = "Cops searched your vehicle and found nothing. You're free to go.",
+            eventLog = "Passed a vehicle search clean."
+        )
+    }
 }
 
 private fun bribeCop(state: GameState): GameState {
