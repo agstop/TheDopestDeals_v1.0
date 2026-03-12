@@ -446,7 +446,7 @@ private fun initialMobsterLoan(day: Int): MobsterState {
     val due = day + LOAN_TERM_DAYS - 1
     return MobsterState(
         debtDueDay = due,
-        latestThreat = "Vinnie \"The Knuckle\" Moretti fronts you cash. He gives you until day $due before you're late.",
+        latestThreat = "Vinnie is tracking your debt. Payment is due by day $due.",
         loans = listOf(Loan(2000, due))
     )
 }
