@@ -1465,11 +1465,11 @@ fun TheDopestDealsApp() {
         onBribe = { state = bribeCop(state) })
     }
     
-    if (state.vinniePenaltyAmount > 0 && !state.gameOver) {
+    if (state.vinniePenaltyAmount > 0) {
         VinniePenaltyDialog(amount = state.vinniePenaltyAmount, isMuted = isMuted, onAcknowledge = { state = state.copy(vinniePenaltyAmount = 0) })
     }
 
-    if (state.gameOver && state.started) {
+    if (state.gameOver && state.started && state.vinniePenaltyAmount == 0) {
         GameOverDialog(state = state, onRetry = {
             currentTab = 0
             state = GameState(leaderboard = state.leaderboard)
@@ -2241,6 +2241,7 @@ private fun VinniePenaltyDialog(amount: Int, isMuted: Boolean, onAcknowledge: ()
             }
         }
     }
+    val isFatal = amount >= 100
     androidx.compose.ui.window.Dialog(
         onDismissRequest = { }, 
         properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
@@ -2256,14 +2257,14 @@ private fun VinniePenaltyDialog(amount: Int, isMuted: Boolean, onAcknowledge: ()
                     Column(modifier = Modifier.weight(0.66f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350))
-                            Text("Vinnie's Collection", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                            Text(if (isFatal) "Final Collection" else "Vinnie's Collection", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                         }
-                        Text("You're late on your payments. Vinnie's guys roughed you up.", color = Color(0xFFFFCC80))
+                        Text(if (isFatal) "Vinnie has run out of patience. He ends your run permanently." else "You're late on your payments. Vinnie's guys roughed you up.", color = Color(0xFFFFCC80))
                     }
                 }
-                Text("Took $amount damage. Pay your debt before it happens again.", color = Color(0xFFCFD8DC))
+                Text(if (isFatal) "Vinnie collected in blood. Game Over." else "Took $amount damage. Pay your debt before it happens again.", color = Color(0xFFCFD8DC))
                 Button(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
-                    Text("Understood")
+                    Text(if (isFatal) "Accept Fate" else "Understood")
                 }
             }
         }
