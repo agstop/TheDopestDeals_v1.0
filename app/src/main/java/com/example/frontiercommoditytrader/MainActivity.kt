@@ -1748,7 +1748,7 @@ private fun BankerCard(
                                 val mp = MediaPlayer.create(context, R.raw.shalom)
                                 mp?.let {
                                     val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                    enhancer.setTargetGain(1100)
+                                    enhancer.setTargetGain(605)
                                     enhancer.enabled = true
                                     it.setOnCompletionListener { player -> enhancer.release(); player.release() }
                                     it.start()
@@ -1767,7 +1767,7 @@ private fun BankerCard(
                                 val mp = MediaPlayer.create(context, R.raw.shalom)
                                 mp?.let {
                                     val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                    enhancer.setTargetGain(1100)
+                                    enhancer.setTargetGain(605)
                                     enhancer.enabled = true
                                     it.setOnCompletionListener { player -> enhancer.release(); player.release() }
                                     it.start()
@@ -1799,7 +1799,7 @@ private fun BankerCard(
                                     val mp = MediaPlayer.create(context, R.raw.shalom)
                                     mp?.let {
                                         val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                        enhancer.setTargetGain(1100)
+                                        enhancer.setTargetGain(605)
                                         enhancer.enabled = true
                                         it.setOnCompletionListener { player -> enhancer.release(); player.release() }
                                         it.start()
@@ -1818,7 +1818,7 @@ private fun BankerCard(
                                     val mp = MediaPlayer.create(context, R.raw.shalom)
                                     mp?.let {
                                         val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                        enhancer.setTargetGain(1100)
+                                        enhancer.setTargetGain(605)
                                         enhancer.enabled = true
                                         it.setOnCompletionListener { player -> enhancer.release(); player.release() }
                                         it.start()
