@@ -519,13 +519,16 @@ private fun buyWeapon(state: GameState, item: MarketWeapon): GameState {
     )
 }
 
-private fun buyAmmo(state: GameState, item: MarketAmmo): GameState {
-    if (state.cash < item.price) return state.copy(message = "Not enough cash.")
+private fun buyAmmo(state: GameState, item: MarketAmmo, qty: Int = 1): GameState {
+    if (qty <= 0) return state
+    val totalCost = item.price * qty
+    if (state.cash < totalCost) return state.copy(message = "you dont have enough cash dude!")
+    if (state.freeStash() < qty) return state.copy(message = "Not enough stash space.")
     
     return state.copy(
-        cash = state.cash - item.price,
-        inventory = addItem(state.inventory, item.ammoName, VendorType.WEAPONS, 1, item.price),
-        message = "Bought 1 ${item.ammoName} for $${item.price}.",
+        cash = state.cash - totalCost,
+        inventory = addItem(state.inventory, item.ammoName, VendorType.WEAPONS, qty, item.price),
+        message = "Bought $qty ${item.ammoName} for $$totalCost.",
     )
 }
 
@@ -1381,8 +1384,8 @@ fun TheDopestDealsApp() {
                                         it.start()
                                     }
                                 }
-                            }, onBuyAmmo = {
-                                state = buyAmmo(state, it)
+                            }, onBuyAmmo = { m, q ->
+                                state = buyAmmo(state, m, q)
                                 if (state.message.contains("enough cash", ignoreCase = true) && !isMuted) {
                                     val mp = MediaPlayer.create(context, R.raw.perfectfart)
                                     mp?.let {
@@ -1988,8 +1991,17 @@ private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) 
                                 onValueChange = { str -> qtyInput = str.filter { it.isDigit() } },
                                 modifier = Modifier.width(60.dp).height(50.dp),
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
                             )
+                            Button(
+                                onClick = {
+                                    val maxAffordable = if (item.price > 0) state.cash / item.price else item.qty
+                                    val finalMax = min(min(item.qty, maxAffordable), state.freeStash())
+                                    qtyInput = finalMax.toString()
+                                },
+                                modifier = Modifier.height(50.dp)
+                            ) { Text("MAX", fontSize = 10.sp) }
                             Button(
                                 onClick = { 
                                     val qty = qtyInput.toIntOrNull() ?: 0
@@ -2026,7 +2038,7 @@ private fun CommodityVendorCard(state: GameState, onBuy: (MarketCommodity, Int) 
 }
 
 @Composable
-private fun WeaponVendorCard(state: GameState, onBuyWeapon: (MarketWeapon) -> Unit, onBuyAmmo: (MarketAmmo) -> Unit) {
+private fun WeaponVendorCard(state: GameState, onBuyWeapon: (MarketWeapon) -> Unit, onBuyAmmo: (MarketAmmo, Int) -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1B1E2C))) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2048,7 +2060,17 @@ private fun WeaponVendorCard(state: GameState, onBuyWeapon: (MarketWeapon) -> Un
                     if (ammo != null) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("${ammo.ammoName} • $${ammo.price} ea", color = Color(0xFFD7CCC8))
-                            Button(onClick = { onBuyAmmo(ammo) }, enabled = state.cash >= ammo.price && !state.gameOver && state.activeEncounter == null) { Text("Buy 1") }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(onClick = { onBuyAmmo(ammo, 1) }, enabled = state.cash >= ammo.price && !state.gameOver && state.activeEncounter == null) { Text("Buy 1") }
+                                Button(
+                                    onClick = { 
+                                        val maxAffordable = if (ammo.price > 0) state.cash / ammo.price else 999
+                                        val finalMax = min(maxAffordable, state.freeStash())
+                                        if (finalMax > 0) onBuyAmmo(ammo, finalMax)
+                                    }, 
+                                    enabled = state.cash >= ammo.price && !state.gameOver && state.activeEncounter == null
+                                ) { Text("MAX", fontSize = 10.sp) }
+                            }
                         }
                     }
                     HorizontalDivider(color = Color(0xFF2A3442))
