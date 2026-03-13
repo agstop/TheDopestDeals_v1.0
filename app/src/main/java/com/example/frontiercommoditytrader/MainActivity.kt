@@ -1658,7 +1658,7 @@ private fun DoctorCard(state: GameState, isMuted: Boolean, onHeal: (Int) -> Unit
                             val mp = MediaPlayer.create(context, R.raw.bandage)
                             mp?.let {
                                 val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
-                                enhancer.setTargetGain(1100)
+                                enhancer.setTargetGain(550)
                                 enhancer.enabled = true
                                 it.setOnCompletionListener { player -> enhancer.release(); player.release() }
                                 it.start()
