@@ -1444,7 +1444,7 @@ fun TheDopestDealsApp() {
                         )
                     }
                     4 -> { // Doctor Tab
-                        DoctorCard(state) { amt -> state = healPlayer(state, amt) }
+                        DoctorCard(state, isMuted) { amt -> state = healPlayer(state, amt) }
                     }
                 }
             }
@@ -1612,7 +1612,8 @@ private fun MobsterCard(
 }
 
 @Composable
-private fun DoctorCard(state: GameState, onHeal: (Int) -> Unit) {
+private fun DoctorCard(state: GameState, isMuted: Boolean, onHeal: (Int) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var amountInput by remember(state.health) { mutableStateOf(max(0, 100 - state.health).toString()) }
     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF222B27))) {
@@ -1653,6 +1654,16 @@ private fun DoctorCard(state: GameState, onHeal: (Int) -> Unit) {
                 )
                 Button(
                     onClick = { 
+                        if (!isMuted) {
+                            val mp = MediaPlayer.create(context, R.raw.bandage)
+                            mp?.let {
+                                val enhancer = android.media.audiofx.LoudnessEnhancer(it.audioSessionId)
+                                enhancer.setTargetGain(1100)
+                                enhancer.enabled = true
+                                it.setOnCompletionListener { player -> enhancer.release(); player.release() }
+                                it.start()
+                            }
+                        }
                         onHeal(amountToHeal)
                         focusManager.clearFocus()
                     }, 
