@@ -289,7 +289,7 @@ data class GameState(
             }
         }
     }
-    fun netWorth(): Int = cash + bankSavings + inventoryValue() - debt
+    fun netWorth(): Int = cash + bankSavings - debt
     fun rankName(): String = when {
         netWorth() >= 100000 -> "Deal Legend"
         netWorth() >= 70000 -> "Cartel Kingpin"
@@ -1552,9 +1552,12 @@ private fun MobsterCard(
                 modifier = Modifier.fillMaxWidth().height(250.dp),
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.AttachMoney, contentDescription = null, tint = Color(0xFFFF8A65))
-                Text("Vinnie", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.AttachMoney, contentDescription = null, tint = Color(0xFFFF8A65))
+                    Text("Vinnie", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+                Text("Cash: $${state.cash}", color = Color(0xFFA5D6A7), fontWeight = FontWeight.Bold)
             }
             StatLine("Due day", state.mobster.debtDueDay.toString())
             StatLine("Past due", state.overdueDays().toString())
